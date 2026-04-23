@@ -44,33 +44,47 @@ class QuestionSchema(BaseModel):
         return v.strip()
 
 
-def _extract_json(raw: str) -> str:
-    # Try to find JSON array in the response
-    match = re.search(r"\[.*\]", raw, re.DOTALL)
-    if match:
-        return match.group(0)
-    # Try JSON object wrapped in array
-    match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if match:
-        return f"[{match.group(0)}]"
-    raise ValueError("No JSON array found in LLM response")
+def _strip_markdown(raw: str) -> str:
+    raw = re.sub(r"```(?:json)?", "", raw)
+    return raw.strip()
+
+
+def _extract_array(raw: str) -> list:
+    """
+    Handles three response shapes:
+      1. {"questions": [...]}   — OpenAI json_object mode
+      2. [...]                  — bare array
+      3. {...single object...}  — single question object
+    """
+    raw = _strip_markdown(raw)
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        logger.error("JSON decode failed: %s\nRaw snippet: %s", e, raw[:300])
+        raise ValueError(f"Invalid JSON: {e}") from e
+
+    if isinstance(data, dict):
+        # OpenAI json_object wrapper
+        for key in ("questions", "items", "results", "data"):
+            if key in data and isinstance(data[key], list):
+                return data[key]
+        # Single question dict
+        return [data]
+
+    if isinstance(data, list):
+        return data
+
+    raise ValueError(f"Unexpected JSON shape: {type(data)}")
 
 
 def parse_questions(raw: str) -> list[dict]:
     logger.info("Parsing LLM response, length=%d", len(raw))
 
-    try:
-        json_str = _extract_json(raw)
-        data = json.loads(json_str)
-    except (json.JSONDecodeError, ValueError) as e:
-        logger.error("JSON extraction failed: %s\nRaw: %s", e, raw[:500])
-        raise ValueError(f"Failed to parse JSON from LLM response: {e}") from e
-
-    if not isinstance(data, list):
-        data = [data]
+    items = _extract_array(raw)
 
     parsed = []
-    for i, item in enumerate(data):
+    for i, item in enumerate(items):
         try:
             q = QuestionSchema(**item)
             parsed.append(q.model_dump())
@@ -78,7 +92,7 @@ def parse_questions(raw: str) -> list[dict]:
         except (ValidationError, TypeError) as e:
             logger.warning("Question %d failed validation, skipping: %s", i + 1, e)
 
-    logger.info("Parsed %d/%d questions successfully", len(parsed), len(data))
+    logger.info("Parsed %d/%d questions successfully", len(parsed), len(items))
 
     if not parsed:
         raise ValueError("All questions failed validation")
