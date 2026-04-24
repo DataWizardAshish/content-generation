@@ -14,6 +14,29 @@ def get_client() -> openai.OpenAI:
     return _client
 
 
+def call_llm_text(prompt: str, system: str = "") -> str:
+    """Call LLM without json_object constraint — for validation which returns JSON arrays."""
+    client = get_client()
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    logger.info("=== VALIDATION PROMPT [model=%s] ===\n%s", MODEL, prompt[:500] + ("..." if len(prompt) > 500 else ""))
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            temperature=0,
+            max_tokens=MAX_TOKENS,
+        )
+        raw = response.choices[0].message.content or ""
+        logger.info("=== VALIDATION RESPONSE ===\n%s", raw[:1000] + ("..." if len(raw) > 1000 else ""))
+        return raw
+    except openai.APIError as e:
+        logger.error("LLM API error: %s", e)
+        raise
+
+
 def call_llm(prompt: str, system: str = "") -> str:
     client = get_client()
 

@@ -26,7 +26,7 @@ A hybrid system:
 
 ## 🧩 Core Workflow
 
-Input → AI Generate → Draft Store → Human Review → Approved Store
+Input → AI Generate → [Grounding Validation] → [Self-Critique] → Draft Store → Human Review → Approved Store
 
 ---
 
@@ -34,9 +34,10 @@ Input → AI Generate → Draft Store → Human Review → Approved Store
 
 - 300+ approved questions
 - Each question is:
-  - Source grounded
-  - Reviewed
-  - Structured
+  - Source grounded (validated by second LLM pass)
+  - Engagement-scored (self-critique pass, 1-10)
+  - Story-phase tagged (Early Life → Return and Reunion)
+  - Reviewed and approved by human
 
 ---
 

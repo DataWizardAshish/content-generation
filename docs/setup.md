@@ -26,7 +26,7 @@ pip install -r requirements.txt
 
 Create `.env`:
 
-ANTHROPIC_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here
 
 ---
 
@@ -38,10 +38,11 @@ streamlit run app.py
 ## 📦 Required Packages
 
 - streamlit
-- anthropic
+- openai
 - python-dotenv
+- requests
+- beautifulsoup4
 - sqlite3 (builtin)
-- pydantic (optional for validation)
 
 ---
 
@@ -62,10 +63,12 @@ streamlit run app.py
 ## 🚀 First Run Flow
 
 1. Open app
-2. Paste chapter text
-3. Generate questions
-4. Review + approve
-5. Verify DB entries
+2. Paste chapter text manually — OR — use "Crawl Next Chapter" to auto-fetch from Wikisource
+3. Set number of questions (default: 3)
+4. Click Generate — runs 3-step pipeline: generate → grounding validation → self-critique
+5. Review questions (grounding badge + engagement score shown)
+6. Approve → saved in DB
+7. Export from Library tab
 
 ---
 

@@ -18,8 +18,17 @@ def reject(draft_id: int):
     logger.info("Rejected question draft_id=%d", draft_id)
 
 
-def get_library(topic: str = "", difficulty: str = "") -> list[dict]:
-    return db.get_approved_questions(topic, difficulty)
+def get_library(topic: str = "", difficulty: str = "", chapter: str = "") -> list[dict]:
+    return db.get_approved_questions(topic, difficulty, chapter)
+
+
+def delete_from_library(approved_id: int):
+    db.delete_approved_question(approved_id)
+    logger.info("Deleted approved question id=%d", approved_id)
+
+
+def get_filter_options() -> dict:
+    return db.get_library_filter_options()
 
 
 def export_to_json(questions: list[dict]) -> str:

@@ -97,11 +97,65 @@ Each task must be marked:
 
 ---
 
+## PHASE 9: PROMPT QUALITY
+
+- [x] Strict grounding rules (every answer traceable to exact quote)
+- [x] Hallucination killer — discard question if no supporting phrase found
+- [x] Distractor quality rule ("almost right" — real names/events, not obviously wrong)
+- [x] Self-contained questions (specific names, no pronouns unless named in same sentence)
+- [x] Answer position randomization (correct answer spread across A/B/C/D)
+- [x] "You Are There" explanation style (present tense, 4-6 sentences, open with scene, embed answer, close with significance)
+
+---
+
+## PHASE 10: MULTI-STEP PIPELINE
+
+- [x] Grounding validation pass (second LLM call, VALIDATION_SYSTEM_PROMPT)
+- [x] Self-critique pass (third LLM call, SELF_CRITIQUE_SYSTEM_PROMPT)
+- [x] Engagement scoring 1-10 per question
+- [x] Daily Insight Candidate flag (score ≥ 8 + surprising explanation)
+- [x] `call_llm_text()` — separate LLM call without JSON response_format constraint
+
+---
+
+## PHASE 11: CONTENT TAGGING
+
+- [x] Story phase tagging (Early Life of Rama, Exile Phase, Sita Haran, Search for Sita, Lanka War, Return and Reunion, Other)
+- [x] Narrative arc metadata per question (short phrase: exile_begins, war_preparation, etc.)
+- [x] DB migration pattern — `_migrate()` adds columns to existing DBs without data loss
+
+---
+
+## PHASE 12: CRAWLER
+
+- [x] Wikisource Ramayana auto-crawler (271 chapters)
+- [x] MD5-keyed HTML disk cache (`crawler_cache/`) — no re-fetch on repeat runs
+- [x] Persistent crawl state (`crawler_state.json`) — resumes from last position
+- [x] Auto-skip chapters with no extractable text
+- [x] Auto-fill chapter title + text directly into Generate tab fields
+
+---
+
+## PHASE 13: UI ENHANCEMENTS
+
+- [x] Grounding badge in Review tab (✅/❌/⚠️ + confidence score + supporting text)
+- [x] Engagement score display (color-coded: green ≥ 8, yellow ≥ 5, red < 5) + 🌟 Daily Insight badge
+- [x] Improvement suggestion from self-critique shown in Review
+- [x] Story phase selectbox in Review (editable before approve)
+- [x] Library: filter by chapter + difficulty (dynamic options from DB)
+- [x] Library: delete approved questions
+- [x] Library: 🌟 insight badge + engagement score in card header
+
+---
+
 ## COMPLETION CHECK
 
 - [x] Generate → Review → Approve works end-to-end
 - [x] No crashes
 - [x] Data persists correctly
+- [x] 3-step pipeline (generate → validate → self-critique) runs on each generation
+- [x] Crawler auto-fills chapter text from Wikisource
+- [x] All metadata (story phase, narrative arc, engagement, insight flag) saved in DB
 
 ---
 
