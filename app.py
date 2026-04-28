@@ -9,6 +9,7 @@ from src import database as db
 from src.generation_service import generate_questions
 from src.review_service import approve, reject, get_pending, get_library, export_to_json, delete_from_library, get_filter_options
 from src.crawler import crawl_next, get_crawl_progress, reset_crawl_state
+from src import pdf_extractor
 
 st.set_page_config(
     page_title="Epic Quiz Admin",
@@ -72,13 +73,44 @@ with tab_generate:
         st.session_state["chapter_title"] = ""
     if "chapter_text" not in st.session_state:
         st.session_state["chapter_text"] = ""
+    if "selected_episode_id" not in st.session_state:
+        st.session_state["selected_episode_id"] = None
 
+    # ── Episode selector (primary mode) ──
+    st.subheader("Select Episode")
+    if not pdf_extractor.is_cache_ready():
+        st.error("PDF cache not ready. Run: `python scripts/extract_pdf.py --pdf 24869-pdf.pdf --out canto_cache/`")
+    else:
+        episodes = db.get_episodes()
+        episode_options = {
+            f"#{ep['sequence_number']} · {ep['episode_name']} ({ep['kanda']}, Cantos {ep['sarga_start']}–{ep['sarga_end']})": ep
+            for ep in episodes
+        }
+        episode_labels = ["— Select an episode —"] + list(episode_options.keys())
+        selected_label = st.selectbox("Episode", episode_labels, index=0)
+
+        if selected_label != "— Select an episode —":
+            ep = episode_options[selected_label]
+            st.caption(f"Phase: **{ep['story_phase']}** | Kanda: {ep['kanda']} | Sargas {ep['sarga_start']}–{ep['sarga_end']}")
+            if st.button("📖 Load Episode Text", use_container_width=True):
+                with st.spinner(f"Loading {ep['sarga_end'] - ep['sarga_start'] + 1} cantos from PDF cache..."):
+                    text, titles = pdf_extractor.fetch_episode_text(ep["kanda"], ep["sarga_start"], ep["sarga_end"])
+                if text:
+                    st.session_state["chapter_text"] = text
+                    st.session_state["chapter_title"] = ep["episode_name"]
+                    st.session_state["selected_episode_id"] = ep["id"]
+                    st.success(f"Loaded {len(titles)} cantos · {len(text):,} chars")
+                    st.rerun()
+                else:
+                    st.warning("No text found for this episode range. Check canto_cache/.")
+
+    st.divider()
     col1, col2 = st.columns([3, 1])
     with col1:
         chapter_title = st.text_input(
-            "Chapter Title (optional)",
+            "Chapter Title",
             key="chapter_title",
-            placeholder="e.g., Book I – Canto I: Nárad",
+            placeholder="Auto-filled from episode, or type manually",
         )
     with col2:
         num_questions = st.number_input("Number of Questions", min_value=1, max_value=30, value=3)
@@ -87,18 +119,20 @@ with tab_generate:
         "Chapter Text",
         key="chapter_text",
         height=350,
-        placeholder="Paste the chapter text here, or use Crawl Next Chapter above.",
+        placeholder="Auto-filled from episode above, or paste manually.",
     )
 
     if st.button("⚡ Generate Questions", type="primary", use_container_width=True):
         if not chapter_text.strip():
-            st.error("Please paste chapter text before generating.")
+            st.error("Please load an episode or paste chapter text before generating.")
         else:
-            with st.spinner(f"Generating {num_questions} questions via Claude API..."):
+            episode_id = st.session_state.get("selected_episode_id")
+            with st.spinner(f"Generating {num_questions} questions via GPT-4o..."):
                 result = generate_questions(
                     chapter_text=chapter_text.strip(),
                     num_questions=num_questions,
                     chapter_title=chapter_title.strip(),
+                    episode_id=episode_id,
                 )
 
             if result["error"]:
@@ -110,21 +144,29 @@ with tab_generate:
 
                 with st.expander("Preview generated questions"):
                     for i, q in enumerate(result["questions"], 1):
+                        if q.get("scene_setup"):
+                            st.caption(f"🎬 {q['scene_setup']}")
                         st.markdown(f"**Q{i}: {q['question']}**")
                         st.markdown(f"- A: {q['option_a']}")
                         st.markdown(f"- B: {q['option_b']}")
                         st.markdown(f"- C: {q['option_c']}")
                         st.markdown(f"- D: {q['option_d']}")
-                        st.markdown(f"✅ **{q['correct_answer']}** | 💬 {q['explanation']}")
-                        st.markdown(f"Difficulty: `{q['difficulty']}` | Topic: `{q.get('topic','')}`")
+                        st.markdown(f"✅ **{q['correct_answer']}** | Difficulty: `{q['difficulty']}` | Topic: `{q.get('topic','')}`")
+                        nc = q.get("narrative_continuation") or q.get("explanation", "")
+                        if nc:
+                            st.markdown(f"📖 *{nc}*")
+                        if q.get("forward_hook"):
+                            st.caption(f"➡️ {q['forward_hook']}")
                         val_status = q.get("validation_status", "unvalidated")
                         conf = q.get("confidence_score")
+                        eng = q.get("engagement_score")
+                        enr = q.get("enrichment_score")
                         if val_status == "approved":
-                            st.success(f"Validation: ✅ approved | Confidence: {conf}/10")
+                            st.success(f"Grounding: ✅ {conf}/10 | Engagement: {eng} | Enrichment: {enr}")
                         elif val_status == "rejected":
-                            st.error(f"Validation: ❌ rejected — {q.get('validation_reason','')}")
+                            st.error(f"Grounding: ❌ rejected — {q.get('validation_reason','')}")
                         else:
-                            st.warning("Validation: ⚠️ unvalidated")
+                            st.warning("Grounding: ⚠️ unvalidated")
                         st.divider()
 
                 st.rerun()
@@ -191,6 +233,12 @@ with tab_review:
                 if q.get("improvement_suggestion"):
                     st.caption(f"💡 Suggestion: {q.get('improvement_suggestion')}")
 
+            edited_scene_setup = st.text_area(
+                "Scene Setup (sets stage before question — present tense)",
+                value=q.get("scene_setup") or "",
+                height=80,
+            )
+
             edited_question = st.text_area("Question", value=q["question"], height=80)
 
             col_a, col_b = st.columns(2)
@@ -230,7 +278,21 @@ with tab_review:
             phase_idx = STORY_PHASES.index(current_phase) if current_phase in STORY_PHASES else len(STORY_PHASES) - 1
             edited_story_phase = st.selectbox("Story Phase", STORY_PHASES, index=phase_idx)
 
-            edited_explanation = st.text_area("Explanation", value=q["explanation"], height=80)
+            nc_value = q.get("narrative_continuation") or q.get("explanation") or ""
+            edited_narrative = st.text_area(
+                "Narrative Continuation (past-tense story confirming answer)",
+                value=nc_value,
+                height=120,
+            )
+            edited_deep_context = st.text_area(
+                "Deep Context (10–15 sentences: cultural/symbolic depth)",
+                value=q.get("deep_context") or "",
+                height=150,
+            )
+            edited_forward_hook = st.text_input(
+                "Forward Hook (1 sentence teasing what comes next)",
+                value=q.get("forward_hook") or "",
+            )
 
             btn_col1, btn_col2 = st.columns(2)
             with btn_col1:
@@ -249,7 +311,11 @@ with tab_review:
                 "difficulty": edited_difficulty,
                 "topic": edited_topic,
                 "story_phase": edited_story_phase,
-                "explanation": edited_explanation,
+                "explanation": edited_narrative,
+                "scene_setup": edited_scene_setup,
+                "narrative_continuation": edited_narrative,
+                "deep_context": edited_deep_context,
+                "forward_hook": edited_forward_hook,
             }
             approve(q["id"], edited_data)
             st.success(f"Question {q['id']} approved!")
@@ -306,10 +372,16 @@ with tab_library:
                         delete_from_library(q["id"])
                         st.rerun()
                 st.divider()
+                if q.get("scene_setup"):
+                    st.caption(f"🎬 {q['scene_setup']}")
                 st.markdown(f"**A:** {q['option_a']}")
                 st.markdown(f"**B:** {q['option_b']}")
                 st.markdown(f"**C:** {q['option_c']}")
                 st.markdown(f"**D:** {q['option_d']}")
                 st.markdown(f"✅ **Correct: {q['correct_answer']}**")
-                st.markdown(f"💬 **Explanation:** {q['explanation']}")
+                nc = q.get("narrative_continuation") or q.get("explanation", "")
+                if nc:
+                    st.markdown(f"📖 *{nc}*")
+                if q.get("forward_hook"):
+                    st.caption(f"➡️ {q['forward_hook']}")
                 st.caption(f"Approved at: {q['approved_at']}")

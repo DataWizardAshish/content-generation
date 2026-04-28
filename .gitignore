@@ -6,3 +6,7 @@ __pycache__/
 logs/*.log
 crawler_cache/
 crawler_state.json
+canto_cache/
+24869-pdf.pdf
+# Added by code-review-graph
+.code-review-graph/

@@ -16,9 +16,18 @@ class QuestionSchema(BaseModel):
     option_c: str
     option_d: str
     correct_answer: str
-    explanation: str
+    explanation: str = ""
     difficulty: str
     topic: str = ""
+    # 5-field narrative fields (new pipeline)
+    scene_setup: str = ""
+    narrative_continuation: str = ""
+    deep_context: str = ""
+    forward_hook: str = ""
+    source_quote: str = ""
+    # pass-through metadata
+    story_phase: str = ""
+    narrative_arc: str = ""
 
     @field_validator("correct_answer")
     @classmethod
@@ -36,7 +45,7 @@ class QuestionSchema(BaseModel):
             raise ValueError(f"difficulty must be one of {VALID_DIFFICULTIES}, got '{v}'")
         return v
 
-    @field_validator("question", "option_a", "option_b", "option_c", "option_d", "explanation")
+    @field_validator("question", "option_a", "option_b", "option_c", "option_d")
     @classmethod
     def not_empty(cls, v):
         if not v or not v.strip():
